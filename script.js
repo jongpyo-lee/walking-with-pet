@@ -1,11 +1,15 @@
-// 전역 상태 관리 객체
+// 전역 상태 관리
 const appState = {
-  departure: null, // 출발지 정보
-  walkType: 'loop', // 'loop' (왕복) 또는 'oneway' (편도)
-  targetDistance: 3, // 기본 3km
+  departure: { lat: 35.838, lng: 129.212 }, // 기본 위치: 경주 중심
+  walkType: 'loop',
+  targetDistance: 3,
 };
 
-// 경주 데이터베이스 (Mock Data)
+let map; // Leaflet 지도 객체
+let markersGroup; // 지도 핀 그룹
+let polylineGroup; // 지도 경로선 그룹
+
+// 경주 코스 Mock Data (실제 위도/경도 포함)
 const gyeongjuCourses = [
   {
     id: 1,
@@ -15,7 +19,20 @@ const gyeongjuCourses = [
     type: "loop",
     safeRatio: "85%",
     warningRatio: "15%",
-    desc: "잔디밭과 흙길 위주, 보행자 전용 구역 비율이 높음"
+    desc: "잔디밭과 흙길 위주, 보행자 전용 구역 비율이 높음",
+    // 안전구간(초록선) 좌표
+    safePath: [
+      [35.8347, 129.2181],
+      [35.8360, 129.2190],
+      [35.8375, 129.2185],
+      [35.8380, 129.2160]
+    ],
+    // 주의구간(주황선) 좌표
+    warningPath: [
+      [35.8380, 129.2160],
+      [35.8365, 129.2145],
+      [35.8347, 129.2181]
+    ]
   },
   {
     id: 2,
@@ -25,59 +42,75 @@ const gyeongjuCourses = [
     type: "loop",
     safeRatio: "100%",
     warningRatio: "0%",
-    desc: "전 구간 차도 완벽 분리 데크길, 편의시설 풍부"
-  },
-  {
-    id: 3,
-    name: "황리단길-월정교 편도 트레일",
-    distance: 3.0,
-    time: "40분",
-    type: "oneway",
-    safeRatio: "60%",
-    warningRatio: "40%",
-    desc: "골목길 차도 주의 구간 포함, 주변 애견동반 카페 다수"
-  },
-  {
-    id: 4,
-    name: "신라왕경숲 장거리 코스",
-    distance: 10.0,
-    time: "2시간 30분",
-    type: "loop",
-    safeRatio: "90%",
-    warningRatio: "10%",
-    desc: "대형견 추천, 한적한 흙길 및 음수대 포인트 포함"
+    desc: "전 구간 차도 완벽 분리 데크길, 편의시설 풍부",
+    safePath: [
+      [35.8420, 129.2800],
+      [35.8440, 129.2850],
+      [35.8410, 129.2900],
+      [35.8380, 129.2850],
+      [35.8420, 129.2800]
+    ],
+    warningPath: []
   }
 ];
 
-// DOM 엘리먼트 획득
 document.addEventListener('DOMContentLoaded', () => {
+  // 1. 지도 초기화 (경주 중심으로 설정)
+  initMap();
+
+  // DOM 요소
   const btnGps = document.getElementById('btn-gps');
-  const btnSearch = document.getElementById('btn-search');
   const inputAddress = document.getElementById('input-address');
   const toggleBtns = document.querySelectorAll('.btn-toggle');
   const chips = document.querySelectorAll('.chip');
   const btnFind = document.getElementById('btn-find-course');
-  const resultsContainer = document.getElementById('course-results');
-  const statusText = document.getElementById('map-status-text');
 
-  // 1. GPS 위치 설정 이벤트
+  // 2. 지도 생성 함수
+  function initMap() {
+    // 경주 시청 근처 좌표로 기본 이동
+    map = L.map('map').setView([appState.departure.lat, appState.departure.lng], 14);
+
+    // OpenStreetMap 타일 레이어 추가
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    markersGroup = L.layerGroup().addTo(map);
+    polylineGroup = L.layerGroup().addTo(map);
+
+    // 출발지 기본 마커 생성
+    L.marker([appState.departure.lat, appState.departure.lng])
+      .addTo(markersGroup)
+      .bindPopup("<b>현재 설정된 출발지</b><br>경주 중심")
+      .openPopup();
+  }
+
+  // 3. GPS 기능
   btnGps.addEventListener('click', () => {
     if (navigator.geolocation) {
-      statusText.innerText = "📍 현재 위치 확인 중...";
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          appState.departure = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          appState.departure = { lat, lng };
+
+          map.setView([lat, lng], 15);
+          markersGroup.clearLayers();
+          
+          L.marker([lat, lng])
+            .addTo(markersGroup)
+            .bindPopup("<b>내 위치 (GPS)</b>")
+            .openPopup();
+
           inputAddress.value = "현재 위치 (GPS 수신 완료)";
-          statusText.innerText = `현재 위치 수신 성공! (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`;
         },
-        () => {
-          alert("위치 정보를 가져올 수 없습니다. 주소를 직접 입력해주세요.");
-        }
+        () => alert("위치 정보를 불러올 수 없습니다.")
       );
     }
   });
 
-  // 2. 산책 유형(왕복/편도) 토글 이벤트
+  // 4. UI 필터 토글 이벤트
   toggleBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
       toggleBtns.forEach(b => b.classList.remove('active'));
@@ -86,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 3. 목표 거리(Chip) 선택 이벤트
   chips.forEach(chip => {
     chip.addEventListener('click', (e) => {
       chips.forEach(c => c.classList.remove('active'));
@@ -95,32 +127,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 4. 코스 검색 버튼 클릭 처리
+  // 5. 코스 찾기 클릭 ➔ 지도에 코스 경로선(Polyline) 그리기
   btnFind.addEventListener('click', () => {
-    if (!appState.departure && !inputAddress.value) {
-      alert("출발지(주소 또는 현위치)를 설정해주세요.");
-      return;
-    }
+    polylineGroup.clearLayers(); // 기존 그려진 선 제거
 
-    // 조건에 어울리는 데이터 필터링
-    const filtered = gyeongjuCourses.filter(course => {
-      const isTypeMatch = course.type === appState.walkType;
-      const isDistMatch = Math.abs(course.distance - appState.targetDistance) <= 2; // ±2km 범위
-      return isTypeMatch || isDistMatch;
+    const filtered = gyeongjuCourses.filter(c => c.type === appState.walkType || true);
+    
+    filtered.forEach(course => {
+      // 안전 구간 (초록색 선)
+      if (course.safePath && course.safePath.length > 0) {
+        L.polyline(course.safePath, { color: '#40c057', weight: 6, opacity: 0.8 }).addTo(polylineGroup);
+      }
+      // 주의 구간 (주황색 선)
+      if (course.warningPath && course.warningPath.length > 0) {
+        L.polyline(course.warningPath, { color: '#fd7e14', weight: 6, opacity: 0.8, dashArray: '8, 8' }).addTo(polylineGroup);
+      }
     });
 
+    // 첫 번째 코스 위치로 지도 이동
+    if (filtered.length > 0 && filtered[0].safePath.length > 0) {
+      map.panTo(filtered[0].safePath[0]);
+    }
+
     renderCourseCards(filtered);
-    statusText.innerText = `검색 완료: ${filtered.length}개의 맞춤 코스를 찾았습니다.`;
   });
 
-  // 결과 카드 랜더링 함수
+  // 하단 결과 카드 생성
   function renderCourseCards(courses) {
+    const resultsContainer = document.getElementById('course-results');
     resultsContainer.innerHTML = '';
-
-    if (courses.length === 0) {
-      resultsContainer.innerHTML = `<div class="course-card"><p>조건에 맞는 코스가 없습니다. 조건(거리/유형)을 변경해보세요.</p></div>`;
-      return;
-    }
 
     courses.forEach(c => {
       const card = document.createElement('div');
