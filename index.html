@@ -5,23 +5,250 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>경주 댕댕산책 - 반려견 맞춤 코스 추천</title>
   
-  <!-- Leaflet 지도 라이브러리 -->
+  <!-- 1. Leaflet CSS 필수 포함 -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
 
-  <link rel="stylesheet" href="style.css">
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      background-color: #ffffff;
+      border-bottom: 1px solid #e9ecef;
+      z-index: 1000;
+      height: 60px;
+    }
+
+    .app-header h1 {
+      font-size: 1.25rem;
+      color: #2b8a3e;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 60px);
+      position: relative;
+    }
+
+    .sidebar {
+      width: 360px;
+      min-width: 360px;
+      background-color: #ffffff;
+      border-right: 1px solid #e9ecef;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+
+    .panel-section h2 {
+      font-size: 0.95rem;
+      color: #495057;
+      margin-bottom: 0.75rem;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .search-box input {
+      flex: 1;
+      padding: 0.6rem;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+
+    .search-box button {
+      padding: 0.6rem 0.9rem;
+      background-color: #495057;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-gps {
+      width: 100%;
+      padding: 0.6rem;
+      background-color: #e7f5ff;
+      color: #1c7ed6;
+      border: 1px solid #a5d8ff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .toggle-group {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-toggle {
+      flex: 1;
+      padding: 0.6rem;
+      border: 1px solid #ced4da;
+      background: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .btn-toggle.active {
+      background-color: #2b8a3e;
+      color: #fff;
+      border-color: #2b8a3e;
+    }
+
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .chip {
+      padding: 0.4rem 0.8rem;
+      border: 1px solid #dee2e6;
+      background-color: #f1f3f5;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .chip.active {
+      background-color: #38d9a9;
+      color: #0b7285;
+      font-weight: bold;
+      border-color: #38d9a9;
+    }
+
+    .legend-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .color-dot.safe { background-color: #2b8a3e; }
+    .color-dot.warning { background-color: #e8590c; }
+
+    .btn-primary {
+      width: 100%;
+      padding: 0.8rem;
+      background-color: #2b8a3e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: auto;
+    }
+
+    /* 지도가 정상적으로 보이도록 height 및 position 명시 */
+    .map-container {
+      flex: 1;
+      position: relative;
+      height: 100%;
+      width: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .course-results {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      gap: 1rem;
+      overflow-x: auto;
+      padding-bottom: 5px;
+      z-index: 1000;
+    }
+
+    .course-card {
+      min-width: 280px;
+      background: white;
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border: 1px solid #e9ecef;
+      cursor: pointer;
+    }
+
+    .course-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .course-card .meta {
+      font-size: 0.85rem;
+      color: #868e96;
+      margin-bottom: 0.6rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .badge-safe { background-color: #d3f9d8; color: #2b8a3e; }
+    .badge-warning { background-color: #ffe8cc; color: #d9480f; }
+  </style>
 </head>
 <body>
   <div id="app">
-    <!-- 상단 헤더 -->
     <header class="app-header">
       <h1>🐾 경주 댕댕산책</h1>
-      <button id="btn-custom-course" class="btn-secondary">+ 코스 만들기</button>
     </header>
 
-    <!-- 메인 컨테이너 -->
     <main class="main-container">
-      <!-- 좌측: 설정 패널 -->
       <aside class="sidebar">
         <section class="panel-section">
           <h2>1. 출발지 설정</h2>
@@ -35,37 +262,31 @@
         <section class="panel-section">
           <h2>2. 산책 유형</h2>
           <div class="toggle-group">
-            <button class="btn-toggle active" data-type="loop">🔄 왕복 (제자리 복귀)</button>
-            <button class="btn-toggle" data-type="oneway">➡️ 편도 (목적지 이동)</button>
+            <button class="btn-toggle active" data-type="loop">🔄 왕복</button>
+            <button class="btn-toggle" data-type="oneway">➡️ 편도</button>
           </div>
         </section>
 
         <section class="panel-section">
           <h2>3. 산책 목표</h2>
-          <div class="target-group">
-            <span class="target-label">거리 선택</span>
-            <div class="chip-group" id="chip-distance">
-              <button class="chip" data-val="1">1km</button>
-              <button class="chip active" data-val="3">3km</button>
-              <button class="chip" data-val="5">5km</button>
-              <button class="chip" data-val="10">10km</button>
-              <button class="chip" data-val="15">15km+</button>
-            </div>
+          <div class="chip-group" id="chip-distance">
+            <button class="chip" data-val="1">1km</button>
+            <button class="chip active" data-val="3">3km</button>
+            <button class="chip" data-val="5">5km</button>
           </div>
         </section>
 
         <section class="panel-section">
           <h2>4. 보행 환경 범례</h2>
           <div class="legend-list">
-            <div class="legend-item"><span class="color-dot safe"></span> 인도 전용 / 안전 구간 (초록 실선)</div>
-            <div class="legend-item"><span class="color-dot warning"></span> 차도 혼용 / 주의 구간 (주황 점선)</div>
+            <div class="legend-item"><span class="color-dot safe"></span> 인도 전용 (초록 실선)</div>
+            <div class="legend-item"><span class="color-dot warning"></span> 차도 혼용 (주황 점선)</div>
           </div>
         </section>
 
         <button id="btn-find-course" class="btn-primary">맞춤 산책 코스 찾기</button>
       </aside>
 
-      <!-- 우측: 지도 영역 -->
       <section class="map-container">
         <div id="map"></div>
         <div class="course-results" id="course-results"></div>
@@ -73,6 +294,173 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <!-- 2. Leaflet JS 필수 포함 -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const appState = {
+      departure: { lat: 35.8381, lng: 129.2118 },
+      walkType: 'loop',
+      targetDistance: 3,
+    };
+
+    let map;
+    let departureMarker;
+    let routeLayers = [];
+
+    const gyeongjuCourses = [
+      {
+        id: 1,
+        name: "첨성대·인왕동 고분군 둘레길",
+        distance: 3.0,
+        time: "45분",
+        type: "loop",
+        safeRatio: "85%",
+        warningRatio: "15%",
+        desc: "인도 전용 산책로 위주, 잔디밭과 흙길 포함 코스",
+        safePath: [
+          [35.8352, 129.2188],
+          [35.8368, 129.2195],
+          [35.8378, 129.2173],
+          [35.8362, 129.2148]
+        ],
+        warningPath: [
+          [35.8362, 129.2148],
+          [35.8348, 129.2160],
+          [35.8352, 129.2188]
+        ]
+      },
+      {
+        id: 2,
+        name: "보문호반길 데크 코스",
+        distance: 5.0,
+        time: "1시간 15분",
+        type: "loop",
+        safeRatio: "100%",
+        warningRatio: "0%",
+        desc: "차도 완벽 분리 인도/데크길, 안전성 우수",
+        safePath: [
+          [35.8423, 129.2801],
+          [35.8451, 129.2858],
+          [35.8415, 129.2912],
+          [35.8378, 129.2862],
+          [35.8423, 129.2801]
+        ],
+        warningPath: []
+      }
+    ];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      setupEventListeners();
+    });
+
+    // 지도 초기화 함수
+    function initMap() {
+      map = L.map('map').setView([appState.departure.lat, appState.departure.lng], 14);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      // 지도 레이어 렌더링 크기 강제 동기화 (안 보이는 현상 방지)
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 200);
+
+      setDepartureMarker(appState.departure.lat, appState.departure.lng, "기본 출발지 (경주)");
+    }
+
+    function setDepartureMarker(lat, lng, title) {
+      if (departureMarker) map.removeLayer(departureMarker);
+
+      departureMarker = L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup(`<b>출발지</b><br>${title}`)
+        .openPopup();
+
+      map.setView([lat, lng], 15);
+      appState.departure = { lat, lng };
+    }
+
+    // 주소 검색 기능 (Nominatim API)
+    async function searchAddress(query) {
+      if (!query.trim()) {
+        alert("검색할 주소를 입력하세요.");
+        return;
+      }
+
+      const searchQuery = query.includes("경주") ? query : `경주시 ${query}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+          const topResult = data[0];
+          const lat = parseFloat(topResult.lat);
+          const lng = parseFloat(topResult.lon);
+
+          setDepartureMarker(lat, lng, topResult.display_name.split(',')[0]);
+        } else {
+          alert("주소를 찾을 수 없습니다.");
+        }
+      } catch (error) {
+        alert("주소 검색 중 오류가 발생했습니다.");
+      }
+    }
+
+    function drawCoursesOnMap(courses) {
+      routeLayers.forEach(layer => map.removeLayer(layer));
+      routeLayers = [];
+
+      const bounds = L.latLngBounds();
+
+      courses.forEach(course => {
+        if (course.safePath && course.safePath.length > 0) {
+          const safeLine = L.polyline(course.safePath, {
+            color: '#2b8a3e',
+            weight: 6,
+            opacity: 0.85
+          }).addTo(map);
+
+          routeLayers.push(safeLine);
+          course.safePath.forEach(pt => bounds.extend(pt));
+        }
+
+        if (course.warningPath && course.warningPath.length > 0) {
+          const warningLine = L.polyline(course.warningPath, {
+            color: '#e8590c',
+            weight: 6,
+            opacity: 0.85,
+            dashArray: '8, 8'
+          }).addTo(map);
+
+          routeLayers.push(warningLine);
+          course.warningPath.forEach(pt => bounds.extend(pt));
+        }
+      });
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function setupEventListeners() {
+      document.getElementById('btn-search').addEventListener('click', () => {
+        searchAddress(document.getElementById('input-address').value);
+      });
+
+      document.getElementById('input-address').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchAddress(e.target.value);
+      });
+
+      document.getElementById('btn-find-course').addEventListener('click', () => {
+        drawCoursesOnMap(gyeongjuCourses);
+      });
+    }
+  </script>
 </body>
 </html>
