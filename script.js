@@ -1,220 +1,140 @@
-// --- 1. 지도 초기화 (기본 중심: 경주시청) ---
-var map = L.map('map').setView([35.8427, 129.2084], 14);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
-
-let currentMarker = null;
-let currentRouteLine = null;
-let currentLat = 35.8427;
-let currentLng = 129.2084;
-
-let myCustomCourses = [];
-let walkRecords = [];
-
-// --- 경주의 실제 인도 및 공원 산책로 정밀 좌표 데이터 ---
-const realWalkingCourses = {
-    "30분": {
-        title: "황성공원 솔숲 산책로",
-        desc: "소나무 그늘과 체육공원 인도를 따라 걷는 쾌적한 30분 코스",
-        // 황성공원 내부 실제 보행로 좌표 배열
-        coords: [
-            [35.8535, 129.2015],
-            [35.8542, 129.2028],
-            [35.8528, 129.2045],
-            [35.8515, 129.2032],
-            [35.8522, 129.2018],
-            [35.8535, 129.2015]
-        ]
-    },
-    "1시간": {
-        title: "보문호수 수변 산책로",
-        desc: "보문 호수 전용 인도와 데크를 따라 걷는 힐링 코스",
-        // 보문호수 수변 산책로 실제 좌표 배열
-        coords: [
-            [35.8480, 129.2550],
-            [35.8495, 129.2572],
-            [35.8475, 129.2595],
-            [35.8450, 129.2580],
-            [35.8442, 129.2555],
-            [35.8480, 129.2550]
-        ]
-    },
-    "3km": {
-        title: "형산강 강변 자전거/인도길",
-        desc: "탁 트인 강바람을 맞으며 걷기 좋은 안전한 강변 보행로",
-        // 형산강변 인도 좌표 배열
-        coords: [
-            [35.8300, 129.2100],
-            [35.8330, 129.2120],
-            [35.8360, 129.2140],
-            [35.8380, 129.2125],
-            [35.8340, 129.2095],
-            [35.8300, 129.2100]
-        ]
-    },
-    "5km": {
-        title: "대릉원 및 돌담길 산책로",
-        desc: "고즈넉한 고분군 옆 돌담길과 인도 완주 코스",
-        // 대릉원 주변 돌담길/인도 좌표 배열
-        coords: [
-            [35.8380, 129.2150],
-            [35.8365, 129.2185],
-            [35.8340, 129.2170],
-            [35.8325, 129.2140],
-            [35.8350, 129.2125],
-            [35.8380, 129.2150]
-        ]
-    }
+// 전역 상태 관리 객체
+const appState = {
+  departure: null, // 출발지 정보
+  walkType: 'loop', // 'loop' (왕복) 또는 'oneway' (편도)
+  targetDistance: 3, // 기본 3km
 };
 
-// --- 2. 현위치 GPS 가져오기 ---
-function getCurrentLocation() {
+// 경주 데이터베이스 (Mock Data)
+const gyeongjuCourses = [
+  {
+    id: 1,
+    name: "첨성대·인왕동 고분군 둘레길",
+    distance: 3.0,
+    time: "45분",
+    type: "loop",
+    safeRatio: "85%",
+    warningRatio: "15%",
+    desc: "잔디밭과 흙길 위주, 보행자 전용 구역 비율이 높음"
+  },
+  {
+    id: 2,
+    name: "보문호반길 코스",
+    distance: 5.0,
+    time: "1시간 15분",
+    type: "loop",
+    safeRatio: "100%",
+    warningRatio: "0%",
+    desc: "전 구간 차도 완벽 분리 데크길, 편의시설 풍부"
+  },
+  {
+    id: 3,
+    name: "황리단길-월정교 편도 트레일",
+    distance: 3.0,
+    time: "40분",
+    type: "oneway",
+    safeRatio: "60%",
+    warningRatio: "40%",
+    desc: "골목길 차도 주의 구간 포함, 주변 애견동반 카페 다수"
+  },
+  {
+    id: 4,
+    name: "신라왕경숲 장거리 코스",
+    distance: 10.0,
+    time: "2시간 30분",
+    type: "loop",
+    safeRatio: "90%",
+    warningRatio: "10%",
+    desc: "대형견 추천, 한적한 흙길 및 음수대 포인트 포함"
+  }
+];
+
+// DOM 엘리먼트 획득
+document.addEventListener('DOMContentLoaded', () => {
+  const btnGps = document.getElementById('btn-gps');
+  const btnSearch = document.getElementById('btn-search');
+  const inputAddress = document.getElementById('input-address');
+  const toggleBtns = document.querySelectorAll('.btn-toggle');
+  const chips = document.querySelectorAll('.chip');
+  const btnFind = document.getElementById('btn-find-course');
+  const resultsContainer = document.getElementById('course-results');
+  const statusText = document.getElementById('map-status-text');
+
+  // 1. GPS 위치 설정 이벤트
+  btnGps.addEventListener('click', () => {
     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-            currentLat = position.coords.latitude;
-            currentLng = position.coords.longitude;
-            
-            map.setView([currentLat, currentLng], 15);
-            if (currentMarker) map.removeLayer(currentMarker);
-            currentMarker = L.marker([currentLat, currentLng]).addTo(map)
-                .bindPopup("🐾 현재 내 위치").openPopup();
-
-            document.getElementById('locationInput').value = "GPS 현위치 적용됨";
-            alert("현재 위치를 지도에 반영했습니다!");
-        }, function(error) {
-            alert("위치 정보를 가져올 수 없습니다. GPS 권한을 확인해주세요.");
-        });
-    } else {
-        alert("이 브라우저는 위치 정보를 지원하지 않습니다.");
-    }
-}
-
-// --- 3. 실제 주소 검색 API (Nominatim) ---
-function searchLocation() {
-    const query = document.getElementById('locationInput').value.trim();
-    if(!query) {
-        alert("주소나 장소명을 입력해주세요.");
-        return;
-    }
-
-    const searchQuery = query.includes("경주") ? query : `${query} 경주`;
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`;
-
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.length > 0) {
-                currentLat = parseFloat(data[0].lat);
-                currentLng = parseFloat(data[0].lon);
-                
-                map.setView([currentLat, currentLng], 15);
-                if (currentMarker) map.removeLayer(currentMarker);
-                currentMarker = L.marker([currentLat, currentLng]).addTo(map)
-                    .bindPopup(`📍 ${data[0].display_name}`).openPopup();
-
-                alert(`"${query}" 위치를 정확히 찾았습니다!`);
-            } else {
-                alert("검색 결과가 없습니다. 올바른 경주 주소나 장소명을 입력해주세요.");
-            }
-        })
-        .catch(error => {
-            alert("주소 검색 중 오류가 발생했습니다.");
-        });
-}
-
-// --- 4. 선택한 목표에 맞춘 실제 인도/산책로 표시 ---
-function recommendCourses() {
-    const goal = document.getElementById('goalSelect').value;
-    const listDiv = document.getElementById('courseList');
-
-    if (currentRouteLine) {
-        map.removeLayer(currentRouteLine);
-    }
-
-    const selectedCourse = realWalkingCourses[goal];
-    if (!selectedCourse) return;
-
-    // 실제 인도/산책로 좌표를 지도 위에 선으로 그리기
-    currentRouteLine = L.polyline(selectedCourse.coords, { color: '#2b8a3e', weight: 6, opacity: 0.9 }).addTo(map);
-    map.fitBounds(currentRouteLine.getBounds());
-
-    let html = `
-        <div class="course-item">
-            <strong>🐾 ${selectedCourse.title} (${goal})</strong><br>
-            <span style="font-size: 0.85rem; color: #555;">
-                ${selectedCourse.desc}<br>
-                🟢 지도 위에 실제 인도 및 보행자 전용 코스가 초록색 실선으로 표시되었습니다!
-            </span>
-        </div>
-    `;
-
-    myCustomCourses.forEach(c => {
-        if (c.goal === goal || goal.includes("전체")) {
-            html += `
-                <div class="course-item">
-                    <strong>🌟 ${c.title}</strong><br>
-                    <span style="font-size: 0.85rem; color: #555;">목표: ${c.goal} | ${c.desc}</span>
-                </div>
-            `;
+      statusText.innerText = "📍 현재 위치 확인 중...";
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          appState.departure = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          inputAddress.value = "현재 위치 (GPS 수신 완료)";
+          statusText.innerText = `현재 위치 수신 성공! (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`;
+        },
+        () => {
+          alert("위치 정보를 가져올 수 없습니다. 주소를 직접 입력해주세요.");
         }
+      );
+    }
+  });
+
+  // 2. 산책 유형(왕복/편도) 토글 이벤트
+  toggleBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      toggleBtns.forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      appState.walkType = e.target.dataset.type;
+    });
+  });
+
+  // 3. 목표 거리(Chip) 선택 이벤트
+  chips.forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      chips.forEach(c => c.classList.remove('active'));
+      e.target.classList.add('active');
+      appState.targetDistance = parseFloat(e.target.dataset.val);
+    });
+  });
+
+  // 4. 코스 검색 버튼 클릭 처리
+  btnFind.addEventListener('click', () => {
+    if (!appState.departure && !inputAddress.value) {
+      alert("출발지(주소 또는 현위치)를 설정해주세요.");
+      return;
+    }
+
+    // 조건에 어울리는 데이터 필터링
+    const filtered = gyeongjuCourses.filter(course => {
+      const isTypeMatch = course.type === appState.walkType;
+      const isDistMatch = Math.abs(course.distance - appState.targetDistance) <= 2; // ±2km 범위
+      return isTypeMatch || isDistMatch;
     });
 
-    listDiv.innerHTML = html;
-    alert(`[${selectedCourse.title}] 실제 인도/산책 코스가 지도에 반영되었습니다.`);
-}
+    renderCourseCards(filtered);
+    statusText.innerText = `검색 완료: ${filtered.length}개의 맞춤 코스를 찾았습니다.`;
+  });
 
-// --- 5. 나만의 코스 등록 ---
-function saveCustomCourse() {
-    const title = document.getElementById('customTitle').value;
-    const desc = document.getElementById('customDesc').value;
-    const goal = document.getElementById('goalSelect').value;
+  // 결과 카드 랜더링 함수
+  function renderCourseCards(courses) {
+    resultsContainer.innerHTML = '';
 
-    if(!title || !desc) {
-        alert("코스 이름과 설명을 모두 입력해주세요.");
-        return;
+    if (courses.length === 0) {
+      resultsContainer.innerHTML = `<div class="course-card"><p>조건에 맞는 코스가 없습니다. 조건(거리/유형)을 변경해보세요.</p></div>`;
+      return;
     }
 
-    myCustomCourses.push({ title, goal, desc });
-    alert("나만의 코스가 성공적으로 등록되었습니다!");
-    document.getElementById('customTitle').value = '';
-    document.getElementById('customDesc').value = '';
-    recommendCourses();
-}
-
-// --- 6. 산책 기록 저장 ---
-function saveWalkRecord() {
-    const date = document.getElementById('recordDate').value;
-    const memo = document.getElementById('recordMemo').value;
-
-    if(!date || !memo) {
-        alert("날짜와 메모를 모두 입력해주세요.");
-        return;
-    }
-
-    walkRecords.push({ date, memo });
-    renderRecords();
-    alert("산책 기록이 저장되었습니다!");
-    document.getElementById('recordMemo').value = '';
-}
-
-function renderRecords() {
-    const recordListDiv = document.getElementById('recordList');
-    if(walkRecords.length === 0) {
-        recordListDiv.innerHTML = `<p class="placeholder-text">저장된 산책 기록이 없습니다.</p>`;
-        return;
-    }
-
-    let html = '';
-    walkRecords.forEach(rec => {
-        html += `
-            <div class="record-item">
-                <span style="font-size: 0.85rem; color: #ff6b6b; font-weight: bold;">📅 ${rec.date}</span><br>
-                <span>🐶 ${rec.memo}</span>
-            </div>
-        `;
+    courses.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'course-card';
+      card.innerHTML = `
+        <h3>${c.name}</h3>
+        <p class="meta">거리: ${c.distance}km | 시간: 약 ${c.time}</p>
+        <p style="font-size: 0.8rem; margin-bottom: 0.5rem; color: #495057;">${c.desc}</p>
+        <div>
+          <span class="badge badge-safe">인도 ${c.safeRatio}</span>
+          ${c.warningRatio !== "0%" ? `<span class="badge badge-warning">차도주의 ${c.warningRatio}</span>` : ''}
+        </div>
+      `;
+      resultsContainer.appendChild(card);
     });
-    recordListDiv.innerHTML = html;
-}
+  }
+});
